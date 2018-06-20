@@ -1,37 +1,26 @@
 # DISTINCT
 
+'about' goes here
 https://docs.google.com/presentation/d/1yXcqzQ_bF7ZG4YzCxm1gXvq6DyfmKGHy297GhTXRL20/edit?usp=sharing
 
 ## Getting Started
 
-These instructions will get you a copy of the project up and running on your local machine for development and testing purposes. See deployment for notes on how to deploy the project on a live system.
+These instructions will get you a copy of the project up and running on your local machine for development and testing purposes.
 
-### Prerequisites
+### Setup
+Step by step instructions for creating/setting up your app on the Bluemix cloud platform (10/5/2017):
 
-Node.js and [Bluemix CLI](https://clis.ng.bluemix.net/ui/home.html) for Deployment
-
-### Installing
-A step by step series of examples that tell you have to get a development env running. (disclaimer: may or may not work)
-
-
-1. Install Node.js from [here](https://nodejs.org/en/download
-
-2. Verify your Node.js installation using ```node --version```.
-
-3. Fork this repository.
-
-4. Go to the forked repository in command line and type ```npm install``` to automatically install the required packages.
-
-5. In order to start the server, type: ```node app.js```
-
-## Running
-
-Running application locally:
+### Running
 Server is hosted on port 3000. It can be changed in the **config/config.js** file.
 
-## Deployment
+**Locally:**
+Prerequisites:
+1. This repository forked
+2. [Node.js](https://nodejs.org/en/download) installed (verify using ```node --version```)
+3. Dependency packages installed ( ```npm install```)
+3. **config/vcap-local.json** file created (refer to [Accessing Cloudant Credentials](#accessing-cloudant-credentials))
 
-Follow this guide for Bluemix [here](https://console.bluemix.net/docs/starters/upload_app.html)
+In command line in your downloaded repository's directory, type ```node app.js```.
 
 ## Development
 
