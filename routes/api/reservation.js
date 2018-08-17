@@ -3,8 +3,6 @@ var rsvn = require('express').Router();
 var path = require('path');
 
 var dbfuncs = require('../../database/dbfuncs.js');
-var fsfuncs = require('../../database/fsfuncs.js');
-
 var schema = require('../../database/schema.js');
 
 /**
@@ -32,17 +30,6 @@ rsvn.get('/listmyreservations', function(req, res) {
 		if (err) { console.log(err); return res.sendStatus(500); }
 		return res.send(data);
 	});
-});
-
-rsvn.get('/rsvnresources', function(req, res) {
-	var rsvnresources = [];
-	for(let rr of schema.rsvnresources) {
-		rsvnresources.push({
-			id: rr,
-			title: rr
-		})
-	}
-	return res.send(rsvnresources)
 });
 
 rsvn.post('/rsvn/:slicename', function(req, res) {

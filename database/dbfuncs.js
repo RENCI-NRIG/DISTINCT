@@ -8,7 +8,7 @@ var dbfuncs = {};
 /** 
  * Verifies user login using params: username, plaintextpassword.
  * Use bcrypt to compare passwords.
- * Returns: a user object containing: id, username
+ * Returns: a user object containing: id, username, role
  */
 dbfuncs.login = function(username, password, callback) {
 	conn.query('SELECT * FROM user WHERE username = ?;', username, function(err, results, fields) {
@@ -22,7 +22,8 @@ dbfuncs.login = function(username, password, callback) {
 			//   update lastlogin
 			var user = {
 				Id : results[0].Id,
-				username : results[0].username
+				username : results[0].username,
+				role: results[0].role
 			};
 			return callback(null, user);
 		});
@@ -35,12 +36,13 @@ dbfuncs.login = function(username, password, callback) {
  * This function hashes the password before inserting into the database.
  * Duplicate username is also checked and returns an error if there is.
  */
-dbfuncs.createuser = function(username, email, password, callback) {
+dbfuncs.createuser = function(username, email, password, role, callback) {
 	bcrypt.hash(password, 10, function(err, hash) {
 		var user = {
 			username: username,
 			email: email,
-			password: hash
+			password: hash,
+			role: role
 		};
 
 		conn.query('INSERT INTO user SET ?', user, function(err, results, fields) {
@@ -197,9 +199,7 @@ dbfuncs.updateTopology = function(topoid, toponame, callback) {
  */
 dbfuncs.deleteTopology = function(topoloc, callback) {
 	conn.query('DELETE topology, permission FROM topology INNER JOIN permission WHERE topology.location = ? AND topology.Id = permission.topoid', topoloc, function(err, results, fields) {
-		if (err) return callback(err);
-
-		return callback(null, results);
+		return callback(err, results);
 	});
 };
 
@@ -207,26 +207,61 @@ dbfuncs.deleteTopology = function(topoloc, callback) {
 /* ============================== DB FUNCTIONS: SLICES =============================== */
 /* =================================================================================== */
 
-// TODO: use moment.js to increment expiration date by 1
-dbfuncs.addActiveSlice = function(topoid, callback) {
-	var activeslice = {
-		topoid: topoid,
-		expiration: new Date().toISOString().slice(0, 19).replace('T', ' ')
-	};
-
-	conn.query('INSERT INTO activeslice SET ?', activeslice, function(err, results, fields) {
-		if (err) return callback(err);
-		return callback(null, results);
+dbfuncs.listSlices = function(userid, callback) {
+	conn.query('SELECT * FROM slice WHERE slice.userid = ?;', userid, function(err, results, fields) {
+		return callback(err, results);
 	});
-
 };
 
 dbfuncs.listActiveSlices = function(userid, callback) {
-	conn.query('SELECT topology.toponame, topology.location FROM permission, topology, activeslice WHERE permission.userid = ? AND permission.topoid = activeslice.topoid;', userid, function(err, results, fields) {
-		if (err) return callback(err);
-		return callback(null, results);
+	conn.query('SELECT * FROM slice WHERE slice.userid = ? AND isDelayed = false;', userid, function(err, results, fields) {
+		return callback(err, results);
 	});
+};
 
+dbfuncs.listDelayedSlices = function(userid, callback) {
+	conn.query('SELECT * FROM slice WHERE slice.userid = ? AND isDelayed = true;', userid, function(err, results, fields) {
+		return callback(err, results);
+	});
+};
+
+dbfuncs.addFile = function(filename, location, callback) {
+	var file = {
+		filename: filename,
+		location : location
+	};
+	conn.query('INSERT INTO file SET ?', file, function(err, results, fields) {
+		return callback(err, results);
+	});
+};
+
+// TODO: use moment.js to increment expiration date by 1
+/**
+ * @param sliceobj {object} - must contain the properties: userid, slicename, isDelayed, toponame, topoloc,
+ *                                                         pemname, pemloc, pubname, publoc, and expiration
+ */
+dbfuncs.addSlice = function(sliceobj, callback) {
+	var properties = ['userid', 'slicename', 'isDelayed', 'topoloc', 'pemname', 'pemloc', 'pubname', 'publoc', 'expiration'];
+	if(!properties.every(function(x) { return x in sliceobj; }))
+		return callback('missing parameter(s)');
+
+	conn.query('INSERT INTO slice SET ?', sliceobj, function(err, results, fields) {
+		return callback(err, results);
+	});
+};
+
+dbfuncs.deleteSlice = function(userid, sliceid, callback) {
+	conn.query('DELETE FROM slice WHERE userid = ? AND Id = ?', [userid, sliceid], function(err, results, fields) {
+		return callback(err, results);
+	});
+};
+
+/**
+ */
+dbfuncs.getSlice = function(userid, sliceid, callback) {
+	conn.query('SELECT * FROM slice WHERE userid = ? AND Id = ?', [userid, sliceid], function(err, results, fields) {
+		return callback(err, results[0]);
+	});
 };
 
 /* =================================================================================== */
@@ -248,11 +283,11 @@ dbfuncs.listAllReservations = function(callback) {
 				slicename: r.slicename,
 				start: r.start,
 				end: r.end
-			})
+			});
 		}
 		return callback(null, reservations);
 	});
-}
+};
 
 /**
  * lists all reservations made by userid
@@ -260,8 +295,9 @@ dbfuncs.listAllReservations = function(callback) {
  * the UTC times are returned in format: YYYY-MM-DD HH:MM:SS
  */
 dbfuncs.listUserReservations = function(userid, callback) {
-	conn.query('SELECT * FROM reservation WHERE userid = ?', userid, function(err, results, fields) {
+	conn.query('SELECT reservation.Id, slice.topoloc, reservation.start, reservation.end FROM reservation, slice WHERE slice.userid = ? AND reservation.sliceid = slice.Id', userid, function(err, results, fields) {
 		if (err) return callback(err);
+		console.log(results);
 		var reservations = [];
 		for(let r of results) {
 			reservations.push({
@@ -269,11 +305,11 @@ dbfuncs.listUserReservations = function(userid, callback) {
 				slicename: r.slicename,
 				start: r.start,
 				end: r.end
-			})
+			});
 		}
 		return callback(null, reservations);
 	});
-}
+};
 
 /**
  * @param resources {array} - of strings
@@ -288,12 +324,10 @@ dbfuncs.addReservation = function(userid, resources, slicename, start, end, call
 		slicename: slicename,
 		start: start,
 		end: end
-	}
-	console.log("querying")
+	};
 	var q = conn.query('INSERT INTO reservation SET ?', reservation, function(err, results, fields) {
 		return callback(err, results);
 	});
-	console.log(q.sql);
 };
 
 /**
@@ -314,7 +348,7 @@ dbfuncs.deleteReservation = function(userid, rsvnid, callback) {
  */
 dbfuncs.updateReservationResource = function(userid, rsvnid, resources, callback) {
 	conn.query('UPDATE reservation SET resources = ? WHERE userid = ? AND Id = ?', [resources.join(), userid, rsvnid], function(err, results, fields) {
-		return callback(err, resultss);
+		return callback(err, results);
 	});
 };
 
@@ -332,3 +366,32 @@ dbfuncs.updateReservationTime = function(userid, rsvnid, start, end, callback) {
 };
 
 module.exports = dbfuncs;
+
+/* ====================================================================================== */
+/* ============================== DB FUNCTIONS: RESOURCES =============================== */
+/* ====================================================================================== */
+
+/**
+ * @returns {array} resources object
+ */
+dbfuncs.listResources = function(callback) {
+	conn.query('SELECT * FROM resource', function(err, results, fields) {
+		return callback(err, results);
+	});
+};
+
+dbfuncs.addResource = function(resname, stitchport, callback) {
+	var reso = {
+		resname: resname,
+		stitchport: stitchport
+	};
+	conn.query('INSERT INTO resource SET ?', reso, function(err, results, fields) {
+		return callback(err, results);
+	});
+};
+
+dbfuncs.deleteResource = function(resoid, callback) {
+	conn.query('DELETE FROM resource WHERE Id = ?', resoid, function(err, results, fields) {
+		return callback(err, results);
+	});
+};
